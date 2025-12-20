@@ -5,6 +5,10 @@ from openai import OpenAI
 from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
 
 
+class InsufficientBalanceError(RuntimeError):
+    pass
+
+
 class DeepSeekService:
     def __init__(self, api_key: str, model: str, base_url: str) -> None:
         self._client = OpenAI(api_key=api_key, base_url=base_url)
@@ -18,7 +22,13 @@ class DeepSeekService:
         for attempt in range(1, max_retries + 1):
             try:
                 return operation()
-            except (APITimeoutError, APIConnectionError, RateLimitError, APIStatusError):
+            except APIStatusError as exc:
+                if exc.status_code == 402:
+                    raise InsufficientBalanceError("DeepSeek balance is insufficient") from exc
+                if attempt == max_retries:
+                    raise
+                self._backoff_sleep(attempt)
+            except (APITimeoutError, APIConnectionError, RateLimitError):
                 if attempt == max_retries:
                     raise
                 self._backoff_sleep(attempt)

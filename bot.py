@@ -16,7 +16,7 @@ from telegram.ext import (
 )
 
 from config import Settings
-from deepseek_client import DeepSeekService
+from deepseek_client import DeepSeekService, InsufficientBalanceError
 
 
 SYSTEM_PROMPT = (
@@ -113,6 +113,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     try:
         response_text = await asyncio.to_thread(deepseek_service.generate, messages)
+    except InsufficientBalanceError:
+        logging.warning("DeepSeek balance is insufficient")
+        await update.message.reply_text(
+            "Недостаточно средств на аккаунте DeepSeek. Пополните баланс и попробуйте снова."
+        )
+        return
     except Exception:
         logging.exception("DeepSeek request failed")
         await update.message.reply_text("Сервис временно недоступен. Попробуйте позже.")
