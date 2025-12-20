@@ -5,9 +5,9 @@ from openai import OpenAI
 from openai import APIConnectionError, APIStatusError, APITimeoutError, RateLimitError
 
 
-class OpenAIService:
-    def __init__(self, api_key: str, model: str) -> None:
-        self._client = OpenAI(api_key=api_key)
+class DeepSeekService:
+    def __init__(self, api_key: str, model: str, base_url: str) -> None:
+        self._client = OpenAI(api_key=api_key, base_url=base_url)
         self._model = model
 
     @staticmethod
@@ -22,17 +22,7 @@ class OpenAIService:
                 if attempt == max_retries:
                     raise
                 self._backoff_sleep(attempt)
-        raise RuntimeError("OpenAI request failed after retries")
-
-    def moderate(self, text: str, max_retries: int = 3) -> bool:
-        response = self._with_retries(
-            lambda: self._client.moderations.create(
-                model="omni-moderation-latest",
-                input=text,
-            ),
-            max_retries=max_retries,
-        )
-        return response.results[0].flagged
+        raise RuntimeError("DeepSeek request failed after retries")
 
     def generate(self, messages: Iterable[dict[str, str]], max_retries: int = 3) -> str:
         response = self._with_retries(

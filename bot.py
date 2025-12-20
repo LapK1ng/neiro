@@ -16,7 +16,7 @@ from telegram.ext import (
 )
 
 from config import Settings
-from openai_client import OpenAIService
+from deepseek_client import DeepSeekService
 
 
 SYSTEM_PROMPT = (
@@ -60,7 +60,7 @@ class DialogManager:
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     message = (
-        "Привет! Я бот, который отвечает с помощью ChatGPT. "
+        "Привет! Я бот, который отвечает с помощью DeepSeek. "
         "Просто напишите сообщение, и я отвечу.\n\n"
         "Доступные команды:\n"
         "/help — инструкция\n"
@@ -94,7 +94,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     user_id = update.effective_user.id
     dialog_manager: DialogManager = context.application.bot_data["dialog_manager"]
     settings: Settings = context.application.bot_data["settings"]
-    openai_service: OpenAIService = context.application.bot_data["openai_service"]
+    deepseek_service: DeepSeekService = context.application.bot_data["deepseek_service"]
 
     if not dialog_manager.can_request(user_id, settings.rate_limit_seconds):
         await update.message.reply_text(
@@ -106,33 +106,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     user_text = update.message.text.strip()
     history = dialog_manager.get_history(user_id)
-
-    try:
-        if openai_service.moderate(user_text):
-            await update.message.reply_text(
-                "Извините, я не могу помочь с этим запросом. "
-                "Могу подсказать безопасную альтернативу, если нужно."
-            )
-            return
-    except Exception:
-        logging.exception("Moderation request failed")
-        await update.message.reply_text(
-            "Сейчас не получается проверить запрос. Попробуйте ещё раз чуть позже."
-        )
-        return
-
     history.append({"role": "user", "content": user_text})
 
     messages: List[dict] = [{"role": "system", "content": SYSTEM_PROMPT}]
     messages.extend(history)
 
     try:
-        response_text = await asyncio.to_thread(openai_service.generate, messages)
+        response_text = await asyncio.to_thread(deepseek_service.generate, messages)
     except Exception:
-        logging.exception("OpenAI request failed")
-        await update.message.reply_text(
-            "Сервис временно недоступен. Попробуйте позже."
-        )
+        logging.exception("DeepSeek request failed")
+        await update.message.reply_text("Сервис временно недоступен. Попробуйте позже.")
         return
 
     history.append({"role": "assistant", "content": response_text})
@@ -141,15 +124,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
 def build_application(settings: Settings) -> Application:
     dialog_manager = DialogManager(settings.message_history_limit)
-    openai_service = OpenAIService(
-        api_key=settings.openai_api_key,
-        model=settings.openai_model,
+    deepseek_service = DeepSeekService(
+        api_key=settings.deepseek_api_key,
+        model=settings.deepseek_model,
+        base_url=settings.deepseek_base_url,
     )
 
     application = Application.builder().token(settings.telegram_token).build()
     application.bot_data["dialog_manager"] = dialog_manager
     application.bot_data["settings"] = settings
-    application.bot_data["openai_service"] = openai_service
+    application.bot_data["deepseek_service"] = deepseek_service
 
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CommandHandler("help", help_command))
